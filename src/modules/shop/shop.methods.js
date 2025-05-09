@@ -1,0 +1,269 @@
+const Shop = require("./shop.model");
+const GenRes = require("../../utils/routers/GenRes");
+const path = require("path");
+const Cart = require("./cart.model");
+const { isValidObjectId } = require("mongoose");
+
+function shuffleArray(array) {
+  // Fisher-Yates Shuffle
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+const ListShop = async (req, res) => {
+  try {
+    const query = req?.query?.search;
+    const page = parseInt(req?.params?.page || "0") || 0;
+    const fetchLimit = 20; // Max number of recent contents to fetch
+
+    const filters = {};
+
+    if (query) {
+      filters.$or = [
+        { name: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } },
+      ];
+    }
+
+    // Fetch latest contents only (limited)
+    const recentProducts = await Shop.find(filters)
+      .sort({ _id: -1 })
+      .skip(page * fetchLimit)
+      .limit(fetchLimit)
+      .select("-content")
+      .lean();
+    // Combine, shuffle, and paginate
+    const mixedProduct = shuffleArray(recentProducts);
+
+    const response = GenRes(
+      200,
+      mixedProduct,
+      null,
+      "Responding shuffled & paginated content"
+    );
+    return res.status(200).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+const SingleShop = async (req, res) => {
+  try {
+    const _id = req?.params?.id;
+    if (!_id) {
+      const response = GenRes(400, null, null, "Missing product id");
+      return res.status(400).json(response);
+    }
+    const data = await Shop.findOne({ _id }).lean();
+    if (!data) {
+      const response = GenRes(404, null, null, "No data found");
+      return res.status(404).json(response);
+    }
+    const response = GenRes(200, data, null, "Responding single shop data");
+    return res.status(200).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+const AddShop = async (req, res) => {
+  try {
+    const data = req?.body;
+    console.log(data);
+    if (!data) {
+      const response = GenRes(400, null, null, "Missing data");
+      return res.status(400).json(response);
+    }
+    const newShop = new Shop(data);
+    await newShop.save();
+    const response = GenRes(201, newShop, null, "New shop added");
+    return res.status(201).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+const DeleteShop = async (req, res) => {
+  try {
+    const _id = req?.params?.id;
+    if (!_id) {
+      const response = GenRes(400, null, null, "NO id found");
+      return res.status(400).json(response);
+    }
+    const deleted = await Shop.findOneAndDelete({ _id }, { new: true });
+    if (!deleted) {
+      const response = GenRes(404, null, null, "NO shop found");
+      return res.status(404).json(response);
+    }
+
+    const failed = [];
+
+    for (const items of deleted?.images) {
+      try {
+        const imagePath = path.join(process.cwd(), items?.slice(1));
+        await fs.unlink(imagePath);
+      } catch (error) {
+        console.log(error);
+        failed.push(items);
+      }
+    }
+
+    const response = GenRes(200, { failed }, null, "Shop deleted");
+    return res.status(200).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+const AddToCart = async (req, res) => {
+  try {
+    const data = req?.body;
+    const user = req?.user;
+
+    const updated = await Cart.findOneAndUpdate(
+      { product: data?.product, email: user?.email },
+      { $set: { ...data, email: user?.email } },
+      {
+        new: true,
+        upsert: true,
+      }
+    );
+
+    const response = GenRes(200, updated, null, "Added to cart");
+    return res.status(200).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+const RemoveFromCart = async (req, res) => {
+  try {
+    const _id = req?.params?.id;
+    if (!_id || !isValidObjectId) {
+      return res.status(404).json(GenRes(404, null, null, "Invalid"));
+    }
+    const user = req?.user;
+    const cart = await Cart.findOneAndDelete(
+      { _id, email: user?.email },
+      { new: true }
+    );
+    if (!cart) {
+      return res.status(404).json(GenRes(404, null, null, "Not found"));
+    }
+    const response = GenRes(200, cart, null, "Removed from cart");
+    return res.status(200).json(response);
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+const GetCart = async (req, res) => {
+  try {
+    const email = req?.user?.email;
+    const data = await Cart.find({ email });
+    const response = GenRes(200, data, null, "Cart");
+    return res.status(200).json(response);
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+const MultipleFiles = async (req, res) => {
+  try {
+    console.log("FILES : ", req?.files);
+    const file_locations = req?.file_locations;
+    console.log(file_locations);
+    const response = GenRes(
+      200,
+      file_locations,
+      null,
+      "Uplodaed Successfully!"
+    );
+    return res.status(200).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+const DeleteFiles = async (req, res) => {
+  try {
+    const filesList = req?.body;
+    console.log(filesList);
+    if (!filesList || !Array.isArray(filesList) || filesList.length === 0) {
+      const response = GenRes(
+        400,
+        null,
+        new Error("Files location must be provided in array"),
+        "Please provide location in valid format"
+      );
+      return res.status(400).json(response);
+    }
+
+    const failedFile = [];
+
+    for (const file of filesList) {
+      try {
+        fs.unlinkSync(path.join(process.cwd(), file.slice(1)));
+      } catch (error) {
+        console.log(error?.message);
+        failedFile.push(file);
+      }
+    }
+
+    const response = GenRes(
+      failedFile?.length > 0 ? 207 : 200,
+      { failedFile },
+      null,
+      "Files Deleted"
+    );
+
+    return res.status(response?.status).json(response);
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+const ReStock = async (req, res) => {
+  try {
+    const _id = req?.params?.id;
+    const { stock } = req?.body;
+    console.log(stock)
+
+    if (!_id || !isValidObjectId(_id)) {
+      const respone = GenRes(
+        400,
+        null,
+        new Error("Invalid ID"),
+        "Please provide valid ID"
+      );
+      return res.status(400).json(respone);
+    }
+
+    const data = await Shop.findOneAndUpdate({ _id }, { $set: { stock } });
+    return res.status(200).json(GenRes(200, data, null, "Updated One"));
+  } catch (error) {
+    const response = GenRes(500, null, error, error?.message);
+    return res.status(500).json(response);
+  }
+};
+
+module.exports = {
+  ListShop,
+  AddShop,
+  DeleteShop,
+  AddToCart,
+  RemoveFromCart,
+  GetCart,
+  MultipleFiles,
+  DeleteFiles,
+  SingleShop,
+  ReStock,
+}; // eslint-disable-line no-unused-vars

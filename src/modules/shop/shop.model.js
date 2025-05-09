@@ -1,0 +1,17 @@
+const { Schema, model, models } = require("mongoose");
+const ModelGenerator = require("../../utils/database/modelGenerator");
+
+const gen = new ModelGenerator();
+
+const ShopSchema = new Schema({
+  name: gen.required(String),
+  description: gen.required(String),
+  price: gen.required(Number),
+  content: String,
+  images: gen.required([String]),
+  stock:gen.required(Number)
+});
+
+const Shop = models?.Shop || model("Shop", ShopSchema);
+
+module.exports = Shop
