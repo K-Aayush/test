@@ -71,6 +71,7 @@ const UpdateFollow = async (req, res) => {
     return res.status(500).json(response);
   }
 };
+
 // list followers
 const ListFollowers = async (req, res) => {
   try {
