@@ -1,5 +1,7 @@
 const { Server } = require("socket.io");
 const ChatMessage = require("../../modules/chat/chat.model");
+const User = require("../../modules/user/user.model");
+const Follow = require("../../modules/follow/follow.model");
 const jwt = require("jsonwebtoken");
 
 //setting up socket handler
@@ -22,7 +24,17 @@ const setupSocketHandlers = (server) => {
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = decoded;
+
+      //Get full user details
+      const user = await User.findById(decoded._id)
+        .select("_id email name picture")
+        .lean();
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      socket.user = user;
 
       next();
     } catch (error) {
@@ -38,6 +50,27 @@ const setupSocketHandlers = (server) => {
     socket.on("private_message", async (data) => {
       try {
         const { receiver, message } = data;
+
+        //check if user follows each other
+        const [followA, followB] = await Promise.all([
+          Follow.findOne({
+            "follower.email": socket.user.email,
+            "following.email": receiver.email,
+          }),
+          Follow.findOne({
+            "follower.email": receiver.email,
+            "following.email": socket.user.email,
+          }),
+        ]);
+
+        if (!followA || followB) {
+          socket.emit("error", {
+            message:
+              "You can only chat with users who follow you and whom you follow back",
+          });
+          return;
+        }
+
         const receiverSocketId = onlineUsers.get(receiver.email);
 
         const newMessage = new ChatMessage({
@@ -98,12 +131,38 @@ const setupSocketHandlers = (server) => {
     });
 
     //Handle typing status
-    socket.on("typing", (data) => {
-      const receiverSocketId = onlineUsers.get(data.receiver.email);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("user_typing", {
-          user: socket.user.email,
-        });
+    socket.on("typing", async (data) => {
+      try {
+        const { receiver } = data;
+
+        //check if user follow each other
+        const [followA, followB] = await Promise.all([
+          Follow.findOne({
+            "follower.email": socket.user.email,
+            "following.email": receiver.email,
+          }),
+          Follow.findOne({
+            "follower.email": receiver.email,
+            "following.email": socket.user.email,
+          }),
+        ]);
+
+        if (!followA || followB) {
+          socket.emit("error", {
+            message:
+              "You can only chat with users who follow you and whom you follow back",
+          });
+          return;
+        }
+
+        const receiverSocketId = onlineUsers.get(receiver.email);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("user_typing", {
+            user: socket.user.email,
+          });
+        }
+      } catch (error) {
+        socket.emit("error", { message: "Failed to send typing status" });
       }
     });
 
