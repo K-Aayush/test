@@ -1,6 +1,7 @@
 const GenRes = require("../../utils/routers/GenRes");
 const User = require("../user/user.model");
 const Follow = require("./follow.model");
+const { isValidObjectId } = require("mongoose");
 
 const UpdateFollow = async (req, res) => {
   try {
@@ -66,12 +67,7 @@ const UpdateFollow = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    const response = GenRes(
-      500,
-      null,
-      { error: error },
-      error?.message
-    );
+    const response = GenRes(500, null, { error: error }, error?.message);
     return res.status(500).json(response);
   }
 };
@@ -117,4 +113,130 @@ const ListFollowings = async (req, res) => {
   }
 };
 
-module.exports = { UpdateFollow, ListFollowers, ListFollowings };
+//Get user's followers
+const GetUsersFollowers = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const page = parseInt(req.query.page) || 0;
+    const limit = 20;
+
+    if (!isValidObjectId(userId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid user ID" },
+            "Invalid user ID provided"
+          )
+        );
+    }
+
+    //find the existing user
+    const user = await User.findById(userId);
+
+    //check if user exists
+    if (!user) {
+      return res
+        .status(404)
+        .json(GenRes(404, null, { error: "User not found" }, "User not found"));
+    }
+
+    //find the followers
+    const followers = await Follow.find({ "following._id": userId })
+      .select("follower")
+      .skip(page * limit)
+      .limit(limit)
+      .lean();
+
+    //map the followerList
+    const followerList = followers.map((f) => {
+      const { _id, ...followerData } = f.follower;
+      return followerData;
+    });
+
+    //If success return 200 OK
+    return res
+      .status(200)
+      .json(
+        GenRes(
+          200,
+          followerList,
+          null,
+          `Found ${followerList.length} followers`
+        )
+      );
+  } catch (error) {
+    //catch the error if any occurs
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+//Get user's following
+const GetUsersFollowing = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const page = parseInt(req.query.page) || 0;
+    const limit = 20;
+
+    if (!isValidObjectId(userId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid user ID" },
+            "Invalid user ID provided"
+          )
+        );
+    }
+
+    //find the existing user
+    const user = await User.findById(userId);
+
+    //return 404 error if user doesn't exists
+    if (!user) {
+      return res
+        .status(404)
+        .json(GenRes(404, null, { error: "User not found" }, "User not found"));
+    }
+
+    //find the followings
+    const following = await Follow.find({ "follower._id": userId })
+      .select("following")
+      .skip(page * limit)
+      .limit(limit)
+      .lean();
+
+    //map the followingList
+    const followingList = following.map((f) => {
+      const { _id, ...followingData } = f.following;
+      return followingData;
+    });
+
+    //If success return 200 OK
+    return res
+      .status(200)
+      .json(
+        GenRes(
+          200,
+          followingList,
+          null,
+          `Found ${followingList.length} followings`
+        )
+      );
+  } catch (error) {
+    //catch the error if any occurs
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+module.exports = {
+  UpdateFollow,
+  ListFollowers,
+  ListFollowings,
+  GetUsersFollowers,
+  GetUsersFollowing,
+};

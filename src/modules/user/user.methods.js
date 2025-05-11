@@ -63,6 +63,7 @@ const UserProfile = async (req, res) => {
   }
 };
 
+
 // verify
 const NewOtp = async (req, res) => {
   const email = req?.body?.email?.toLowerCase();

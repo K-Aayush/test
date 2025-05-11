@@ -20,6 +20,7 @@ router.get("/user-exist", UserExist);
 router.get("/user-profile", basicMiddleware, UserProfile);
 router.get("/stalk-profile/:id", basicMiddleware, StalkProfile);
 
+
 // post req
 router.post("/register-user", registerMiddleware, RegisterUser);
 router.post("/send-otp", NewOtp);
