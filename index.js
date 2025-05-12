@@ -1,12 +1,19 @@
+// index.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
+const http = require("http");
+const setupSocketHandlers = require("./src/utils/socket/socketHandler");
 const App = require("./src/App");
 const DB = require("./src/config/connectDB");
-const path = require("path");
 
 // make an app
 const app = express();
+const server = http.createServer(app);
+
+// Initialize socket
+setupSocketHandlers(server);
 
 // use middlewares
 app.use(
@@ -28,10 +35,10 @@ DB();
 // calling main App
 App(app);
 
-app.listen(process.env.PORT, (error) => {
+server.listen(process.env.PORT, (error) => {
   if (error) {
-    console.error("Error in listening Server : ", error);
+    console.error("Error in listening Server:", error);
   } else {
-    console.log("Server connected in :", process.env.PORT);
+    console.log("Server connected in:", process.env.PORT);
   }
 });

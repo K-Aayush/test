@@ -1,3 +1,4 @@
+// src/modules/contents/contents.model.js
 const { Schema, model, models } = require("mongoose");
 const ModelGenerator = require("../../utils/database/modelGenerator");
 
@@ -9,14 +10,8 @@ const contentSchema = new Schema(
     files: [String],
     type: gen.required(String, {
       default: "innovation",
-      enum: [
-        "innovation",
-        "news",
-        "announcement",
-        "vacancy",
-        "status",
-        "Innovation",
-      ],
+      enum: ["innovation", "news", "announcement", "vacancy", "status"],
+      set: (v) => v.toLowerCase(), 
     }),
     author: {
       name: gen.required(String),
