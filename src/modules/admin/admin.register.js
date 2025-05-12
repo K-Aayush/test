@@ -1,4 +1,4 @@
-const transporter  = require("../../config/Mailer");
+const transporter = require("../../config/Mailer");
 const GenRes = require("../../utils/routers/GenRes");
 const User = require("../user/user.model");
 const jwt = require("jsonwebtoken");
@@ -37,7 +37,7 @@ const registerAdmin = async (req, res) => {
     // Send beautiful HTML email
     await transporter.sendMail({
       from: process.env.MAILING,
-      to: `${process.env.MAILING},${process.env.EMAIL}`, // Internal notification
+      to: normalizedEmail,
       subject: "Confirm Admin Registration?",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; background-color: #f9f9f9;">
