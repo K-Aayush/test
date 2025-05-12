@@ -4,24 +4,24 @@ const CryptoJS = require("crypto-js");
 
 const gen = new ModelGenerator();
 
-//creating chat schema
+// Define sub-schemas for sender and receiver
+const UserSchema = new Schema(
+  {
+    _id: gen.required(String),
+    email: gen.required(String),
+    name: gen.required(String),
+    picture: String,
+  },
+  { _id: false }
+);
+
 const MessageSchema = new Schema(
   {
-    sender: gen.required({
-      _id: { type: String, required: true },
-      email: { type: String, required: true },
-      name: { type: String, required: true },
-      picture: { type: String },
-    }),
-    receiver: gen.required({
-      _id: { type: String, required: true },
-      email: { type: String, required: true },
-      name: { type: String, required: true },
-      picture: { type: String },
-    }),
+    sender: gen.required(UserSchema),
+    receiver: gen.required(UserSchema),
     message: gen.required(String),
     read: gen.required(Boolean, { default: false }),
-    readAt: { type: Date },
+    readAt: Date,
     deletedBySender: gen.required(Boolean, { default: false }),
     deletedByReceiver: gen.required(Boolean, { default: false }),
   },
