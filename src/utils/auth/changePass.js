@@ -13,7 +13,7 @@ const setCode = async (email) => {
 
     // Send email
     await transporter.sendMail({
-      from: process.env.MAIL,
+      from: process.env.EMAIL,
       to: email,
       subject: "Your OTP Code",
       html: `<p>Your OTP code is <strong>${otp}</strong>. It will expire in 5 minutes.</p><p>Do not share this with anyone.</p>`,
