@@ -11,7 +11,7 @@ const connectDB = () => {
       console.log("Connected DB in ", uri);
     });
   } catch (error) {
-    console.error.bind("Error occured in Data Base : ", error);
+    console.error("Error occured in Data Base : ", error);
   }
 };
 

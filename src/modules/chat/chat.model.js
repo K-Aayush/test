@@ -1,5 +1,6 @@
 const { Schema, model, models } = require("mongoose");
 const ModelGenerator = require("../../utils/database/modelGenerator");
+const CryptoJS = require("crypto-js");
 
 const gen = new ModelGenerator();
 
@@ -26,6 +27,26 @@ const MessageSchema = new Schema(
   },
   { timestamps: true }
 );
+
+//Encrypt message before saving
+MessageSchema.pre("save", function (next) {
+  if (this.isModified("message")) {
+    this.message = CryptoJS.AES.encrypt(
+      this.message,
+      process.env.CHAT_ENCRYPTION_KEY
+    ).toString();
+  }
+  next();
+});
+
+//Decrypt message when receiving
+MessageSchema.methods.dcryptMessage = function () {
+  const bytes = CryptoJS.AES.decrypt(
+    this.message,
+    process.env.CHAT_ENCRYPTION_KEY
+  );
+  return bytes.toString(CryptoJS.enc.Utf8);
+};
 
 const ChatMessage =
   models?.ChatMessageChatMessage || model("ChatMessage", MessageSchema);
