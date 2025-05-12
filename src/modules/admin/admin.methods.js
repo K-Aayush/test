@@ -7,16 +7,21 @@ const SaveAdmin = async (req, res) => {
   try {
     const clientToken = req?.params?.token;
     if (!clientToken) throw new Error("Token not found");
-    const data = jwt.verify(clientToken, process.env.JWT_GENERATE);
-    if (!data) {
-      throw new Error("Request Time Expired");
-    }
-    delete data.iat;
-    const salt = await bcrypt.genSalt(10);
-    const password = await bcrypt.hash(data?.password, salt);
 
-    const newAdmin = new User({ ...data, password });
-    await newAdmin.save();
+    const data = jwt.verify(clientToken, process.env.JWT_GENERATE);
+    if (!data || !data.email) throw new Error("Invalid or expired token");
+
+    const user = await User.findOne({ email: data.email, role: "admin" });
+    if (!user) throw new Error("Admin not found");
+
+    if (user.isVerified) {
+      return res
+        .status(301)
+        .redirect(`${process.env.WEB_HOST}/already-verified`);
+    }
+
+    user.isVerified = true;
+    await user.save();
 
     return res
       .status(301)
@@ -25,7 +30,9 @@ const SaveAdmin = async (req, res) => {
     return res
       .status(301)
       .redirect(
-        `${process.env.WEB_HOST}/registration-failed?message=${error?.message}`
+        `${
+          process.env.WEB_HOST
+        }/registration-failed?message=${encodeURIComponent(error?.message)}`
       );
   }
 };
