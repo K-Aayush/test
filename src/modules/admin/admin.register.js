@@ -2,6 +2,7 @@ const transporter = require("../../config/Mailer");
 const GenRes = require("../../utils/routers/GenRes");
 const User = require("../user/user.model");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 const registerAdmin = async (req, res) => {
   try {
