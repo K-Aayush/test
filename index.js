@@ -17,7 +17,10 @@ setupSocketHandlers(server);
 
 // use middlewares
 app.use(
-  cors({}),
+  cors({
+    origin: process.env.WEB_HOST,
+    methods: ["GET", "POST"],
+  }),
   express.json({ limit: "200gb" }),
   express.urlencoded({ extended: true, limit: "200gb" })
 );
