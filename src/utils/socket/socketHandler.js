@@ -63,7 +63,7 @@ const setupSocketHandlers = (server) => {
           }),
         ]);
 
-        if (!followA || followB) {
+        if (!followA || !followB) {
           socket.emit("error", {
             message:
               "You can only chat with users who follow you and whom you follow back",
@@ -147,7 +147,7 @@ const setupSocketHandlers = (server) => {
           }),
         ]);
 
-        if (!followA || followB) {
+        if (!followA || !followB) {
           socket.emit("error", {
             message:
               "You can only chat with users who follow you and whom you follow back",
