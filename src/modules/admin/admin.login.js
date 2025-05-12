@@ -8,63 +8,77 @@ const loginAdmin = async (req, res) => {
     const email = req?.body?.email?.toLowerCase();
     const password = req?.body?.password;
 
-    // 400
     if (!email || !password) {
-      const response = GenRes(
-        400,
-        null,
-        { error: "Email and Password is required!" },
-        "400 | Email or password not Found"
-      );
-      return res.status(400).json(response);
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Missing credentials" },
+            "Email & Password required"
+          )
+        );
     }
 
-    const userData = await User.findOne({ email, role: "admin" });
-    if (!userData) {
-      const response = GenRes(
-        404,
-        null,
-        { error: "User not registerred!" },
-        "User not found"
-      );
-      return res.status(404).json(response);
+    const user = await User.findOne({ email, role: "admin" });
+    if (!user) {
+      return res
+        .status(404)
+        .json(
+          GenRes(
+            404,
+            null,
+            { error: "Admin not found" },
+            "Admin not registered"
+          )
+        );
     }
 
-    // check password
-    const isCorrectPassword = await bcrypt.compare(
-      password,
-      userData?.password
-    );
-
-    //respond after check password
-    if (!isCorrectPassword) {
+    if (!user.isVerified) {
       const response = GenRes(
-        401,
+        403,
         null,
-        { error: "Incorrect Credentials [PASSWORD DIDNT MATCH]" },
-        "Incorrect Credentaials"
+        { error: "Admin email not verified." },
+        "Account not verified"
       );
-      return res.status(401).json(response);
+      return res.status(403).json(response);
     }
 
-    userData.signedIn = [...userData?.signedIn, new Date()?.toDateString()];
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect) {
+      return res
+        .status(401)
+        .json(
+          GenRes(401, null, { error: "Incorrect password" }, "Login failed")
+        );
+    }
 
-    const genData = {
-      email: userData?.email,
-      _id: userData?._id?.toString(),
-      phone: userData?.phone,
-      date: new Date(),
+    // Update sign-in history
+    user.signedIn.push(new Date());
+    await user.save();
+
+    const payload = {
+      email: user.email,
+      _id: user._id.toString(),
+      phone: user.phone,
+      role: user.role,
     };
 
-    const accessToken = jwt.sign(genData, process.env.JWT_ADMIN);
-    const obj = userData.toObject();
-    delete obj.signedIn;
-    delete obj.password;
-    const saveData = GenRes(200, obj, null, "Logged in");
-    return res.status(200).json({ ...saveData, accessToken });
-  } catch (error) {
-    const respones = GenRes(500, null, error, error?.message);
-    return res.status(500).json(respones);
+    const token = jwt.sign(payload, process.env.JWT_ADMIN, { expiresIn: "1d" });
+
+    const {
+      password: _,
+      signedIn,
+      ...userWithoutSensitiveData
+    } = user.toObject();
+
+    return res.status(200).json({
+      ...GenRes(200, userWithoutSensitiveData, null, "Admin login successful"),
+      accessToken: token,
+    });
+  } catch (err) {
+    return res.status(500).json(GenRes(500, null, err.message, "Server error"));
   }
 };
 

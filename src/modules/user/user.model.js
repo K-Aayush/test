@@ -29,6 +29,9 @@ const UserSchema = new Schema(
     password: String,
     refreshToken: String,
 
+    //isverified admin
+    isVerified: { type: Boolean, default: false },
+
     // access
     role: gen.required(String, "user", ["user", "editor", "admin", "vendor"]),
     level: gen.required(String, "bronze", ["bronze"]),
