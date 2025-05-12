@@ -9,12 +9,19 @@ const contentSchema = new Schema(
     files: [String],
     type: gen.required(String, {
       default: "innovation",
-      enum: ["innovation", "news", "announcement", "vacancy", "status"],
+      enum: [
+        "innovation",
+        "news",
+        "announcement",
+        "vacancy",
+        "status",
+        "Innovation",
+      ],
     }),
     author: {
       name: gen.required(String),
       picture: String,
-      email: gen.required(String), // fixed typo
+      email: gen.required(String),
       _id: String,
     },
   },

@@ -30,7 +30,7 @@ App(app);
 
 app.listen(process.env.PORT, (error) => {
   if (error) {
-    console.error.bind("Error in listening Server : ", error);
+    console.error("Error in listening Server : ", error);
   } else {
     console.log("Server connected in :", process.env.PORT);
   }
