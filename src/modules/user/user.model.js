@@ -18,6 +18,11 @@ const UserSchema = new Schema(
     achievements: String,
     bio: String,
 
+    // vendor details
+    businessName: String,
+    businessDescription: String,
+    businessAddress: String,
+
     // authenticatoin
     email: { type: String, required: true, unique: true },
     uid: gen.unique(String, { required: false }),
@@ -25,9 +30,9 @@ const UserSchema = new Schema(
     refreshToken: String,
 
     // access
-    role: gen.required(String, "user", ["user", "editor", "admin"]),
+    role: gen.required(String, "user", ["user", "editor", "admin", "vendor"]),
     level: gen.required(String, "bronze", ["bronze"]),
-    
+
     // activity
     signedIn: [Date],
     createdAt: gen.required(Date, { default: new Date() }),
