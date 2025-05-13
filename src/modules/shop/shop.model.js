@@ -9,9 +9,14 @@ const ShopSchema = new Schema({
   price: gen.required(Number),
   content: String,
   images: gen.required([String]),
-  stock:gen.required(Number)
+  stock: gen.required(Number),
+  vendor: {
+    _id: gen.required(String),
+    email: gen.required(String),
+    businessName: gen.required(String)
+  }
 });
 
 const Shop = models?.Shop || model("Shop", ShopSchema);
 
-module.exports = Shop
+module.exports = Shop;
