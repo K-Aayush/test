@@ -1,12 +1,11 @@
-const Shop = require("./shop.model");
-const GenRes = require("../../utils/routers/GenRes");
 const path = require("path");
+const GenRes = require("../../utils/routers/GenRes");
+const Shop = require("./shop.model");
 const Cart = require("./cart.model");
 const { isValidObjectId } = require("mongoose");
 const fs = require("fs");
 
 function shuffleArray(array) {
-  // Fisher-Yates Shuffle
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
@@ -17,6 +16,7 @@ function shuffleArray(array) {
 const ListShop = async (req, res) => {
   try {
     const query = req?.query?.search;
+    const category = req?.query?.category;
     const page = parseInt(req?.params?.page || "0") || 0;
     const fetchLimit = 20;
 
@@ -31,7 +31,12 @@ const ListShop = async (req, res) => {
       filters.$or = [
         { name: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
+        { category: { $regex: query, $options: "i" } },
       ];
+    }
+
+    if (category) {
+      filters.category = { $regex: category, $options: "i" };
     }
 
     const recentProducts = await Shop.find(filters)
@@ -90,6 +95,11 @@ const AddShop = async (req, res) => {
 
     if (!data) {
       const response = GenRes(400, null, null, "Missing data");
+      return res.status(400).json(response);
+    }
+
+    if (!data.category) {
+      const response = GenRes(400, null, null, "Category is required");
       return res.status(400).json(response);
     }
 
