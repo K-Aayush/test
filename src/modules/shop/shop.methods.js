@@ -2,6 +2,7 @@ const path = require("path");
 const GenRes = require("../../utils/routers/GenRes");
 const Shop = require("./shop.model");
 const Cart = require("./cart.model");
+const Category = require("./category.model");
 const { isValidObjectId } = require("mongoose");
 const fs = require("fs");
 
@@ -16,13 +17,12 @@ function shuffleArray(array) {
 const ListShop = async (req, res) => {
   try {
     const query = req?.query?.search;
-    const category = req?.query?.category;
+    const categoryId = req?.query?.category;
     const page = parseInt(req?.params?.page || "0") || 0;
     const fetchLimit = 20;
 
     const filters = {};
 
-    // Add vendor filter if vendor is making the request
     if (req.vendor) {
       filters["vendor._id"] = req.vendor._id;
     }
@@ -31,12 +31,12 @@ const ListShop = async (req, res) => {
       filters.$or = [
         { name: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
-        { category: { $regex: query, $options: "i" } },
+        { "category.name": { $regex: query, $options: "i" } },
       ];
     }
 
-    if (category) {
-      filters.category = { $regex: category, $options: "i" };
+    if (categoryId) {
+      filters["category._id"] = categoryId;
     }
 
     const recentProducts = await Shop.find(filters)
@@ -98,19 +98,38 @@ const AddShop = async (req, res) => {
       return res.status(400).json(response);
     }
 
-    if (!data.category) {
+    if (!data.categoryId) {
       const response = GenRes(400, null, null, "Category is required");
       return res.status(400).json(response);
     }
 
-    // Add vendor information if vendor is making the request
-    if (req.vendor) {
-      data.vendor = {
-        _id: req.vendor._id,
-        email: req.vendor.email,
-        businessName: req.vendor.businessName,
-      };
+    // Verify category exists and belongs to vendor
+    const category = await Category.findOne({
+      _id: data.categoryId,
+      "vendor._id": req.vendor._id,
+    });
+
+    if (!category) {
+      return res
+        .status(404)
+        .json(
+          GenRes(404, null, { error: "Category not found" }, "Invalid category")
+        );
     }
+
+    // Add vendor and category information
+    data.vendor = {
+      _id: req.vendor._id,
+      email: req.vendor.email,
+      businessName: req.vendor.businessName,
+    };
+
+    data.category = {
+      _id: category._id.toString(),
+      name: category.name,
+    };
+
+    delete data.categoryId;
 
     const newShop = new Shop(data);
     await newShop.save();

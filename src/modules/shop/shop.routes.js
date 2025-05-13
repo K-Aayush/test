@@ -1,5 +1,4 @@
 const router = require("express").Router();
-const { adminMiddleware } = require("../../middlewares/adminMiddleware");
 const { vendorMiddleware } = require("../../middlewares/vendorMiddleware");
 const basicMiddleware = require("../../middlewares/basicMiddleware");
 const ShopFile = require("../../utils/fileProcessor/multer.shop");
@@ -14,14 +13,22 @@ const {
   SingleShop,
   ReStock,
 } = require("./shop.methods");
+const {
+  AddCategory,
+  GetCategories,
+  DeleteCategory,
+} = require("./category.methods");
 
+// Category routes for vendors
+router.post("/vendor-add-category", vendorMiddleware, AddCategory);
+router.get("/vendor-categories", vendorMiddleware, GetCategories);
+router.delete("/vendor-delete-category/:id", vendorMiddleware, DeleteCategory);
+
+// Public shop routes
 router.get("/list-shops/:page", basicMiddleware, ListShop);
 router.get("/get-shop/:id", basicMiddleware, SingleShop);
 
-router.get("/admin-list-shops/:page", adminMiddleware, ListShop);
-router.get("/admin-get-shop/:id", adminMiddleware, SingleShop);
-
-// Vendor routes
+// Vendor shop management routes
 router.get("/vendor-list-shops/:page", vendorMiddleware, ListShop);
 router.get("/vendor-get-shop/:id", vendorMiddleware, SingleShop);
 router.post("/vendor-add-shop", vendorMiddleware, AddShop);
@@ -34,19 +41,7 @@ router.post(
   MultipleFiles
 );
 
-router.post(
-  "/upload-shop-images",
-  adminMiddleware,
-  ShopFile.any(),
-  MultipleFiles
-);
-router.post("/delete-shop-images", adminMiddleware, DeleteShop);
-
-router.post("/add-shop", adminMiddleware, AddShop);
-router.post("/update-shop/:id", adminMiddleware, ReStock);
-router.delete("/delete-shop/:id", adminMiddleware, DeleteShop);
-
-// list carts
+// Cart management routes
 router.get("/list-carts", basicMiddleware, GetCart);
 router.post("/add-to-cart", basicMiddleware, AddToCart);
 router.delete("/delete-cart/:id", basicMiddleware, RemoveFromCart);
