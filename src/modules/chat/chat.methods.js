@@ -3,7 +3,7 @@ const ChatMessage = require("./chat.model");
 const GenRes = require("../../utils/routers/GenRes");
 const Follow = require("../follow/follow.model");
 
-//method to get message
+// Get messages between two users
 const GetMessages = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -23,11 +23,11 @@ const GetMessages = async (req, res) => {
         );
     }
 
-    //check if users follow each other
+    // Check if users follow each other
     const [followA, followB] = await Promise.all([
       Follow.findOne({
         "follower.email": req.user.email,
-        "followind._id": userId,
+        "following._id": userId,
       }),
       Follow.findOne({
         "follower._id": userId,
@@ -66,14 +66,14 @@ const GetMessages = async (req, res) => {
       .skip(page * limit)
       .limit(limit);
 
-    //Decrypt Messages
+    // Decrypt messages
     const decryptedMessages = messages.map((msg) => {
       const msgObj = msg.toObject();
       msgObj.message = msg.decryptMessage();
       return msgObj;
     });
 
-    //mark message as read
+    // Mark messages as read
     await ChatMessage.updateMany(
       {
         "sender._id": userId,
@@ -95,7 +95,7 @@ const GetMessages = async (req, res) => {
           200,
           decryptedMessages,
           null,
-          `Retrived ${decryptedMessages.length} messages`
+          `Retrieved ${decryptedMessages.length} messages`
         )
       );
   } catch (error) {
@@ -103,12 +103,12 @@ const GetMessages = async (req, res) => {
   }
 };
 
-//Get chat list with latest messages
+// Get chat list with latest messages
 const GetChats = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    //get mutual followers
+    // Get mutual followers
     const following = await Follow.find({ "follower._id": userId }).select(
       "following"
     );
@@ -116,11 +116,11 @@ const GetChats = async (req, res) => {
       "follower"
     );
 
-    const mutalEmails = following
+    const mutualEmails = following
       .map((f) => f.following.email)
       .filter((email) => followers.some((f) => f.follower.email === email));
 
-    //Get latest chat message from each conversation
+    // Get latest chat message from each conversation
     const chats = await ChatMessage.aggregate([
       {
         $match: {
@@ -128,12 +128,12 @@ const GetChats = async (req, res) => {
             {
               "sender._id": userId,
               deletedBySender: false,
-              "receiver.email": { $in: mutalEmails },
+              "receiver.email": { $in: mutualEmails },
             },
             {
               "receiver._id": userId,
               deletedByReceiver: false,
-              "sender.email": { $in: mutalEmails },
+              "sender.email": { $in: mutualEmails },
             },
           ],
         },
@@ -169,7 +169,7 @@ const GetChats = async (req, res) => {
       },
     ]);
 
-    //Decrypt last messages
+    // Decrypt last messages
     const decryptedChats = chats.map((chat) => {
       const msgDoc = new ChatMessage(chat.lastMessage);
       chat.lastMessage.message = msgDoc.decryptMessage();
@@ -191,37 +191,161 @@ const GetChats = async (req, res) => {
   }
 };
 
-//Delete message
-// const DeleteMessage = async (req, res) => {
-//   try {
-//     const messageId = req.params.messageId;
-//     const userId = req.user._id;
+// Delete message for me
+const DeleteMessageForMe = async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const userId = req.user._id;
 
-//     if (!isValidObjectId(messageId)) {
-//       return res
-//         .status(400)
-//         .json(
-//           GenRes(
-//             400,
-//             null,
-//             { error: "Invalid message Id" },
-//             "Invalid message Id provided"
-//           )
-//         );
-//     }
+    if (!isValidObjectId(messageId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid message ID" },
+            "Invalid message ID"
+          )
+        );
+    }
 
-//     const message = await ChatMessage.findOne({ _id: messageId });
-//     if (!message) {
-//       return res
-//         .status(404)
-//         .json(
-//           GenRes(
-//             404,
-//             null,
-//             { error: "Message not found" },
-//             "Message not forund"
-//           )
-//         );
-//     }
-//   } catch (error) {}
-// };
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      return res
+        .status(404)
+        .json(
+          GenRes(404, null, { error: "Message not found" }, "Message not found")
+        );
+    }
+
+    // Update deletion flag based on user role (sender/receiver)
+    const updateField =
+      message.sender._id.toString() === userId.toString()
+        ? { deletedBySender: true }
+        : { deletedByReceiver: true };
+
+    await ChatMessage.findByIdAndUpdate(messageId, { $set: updateField });
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Message deleted for you"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+// Delete message for everyone
+const DeleteMessageForEveryone = async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const userId = req.user._id;
+
+    if (!isValidObjectId(messageId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid message ID" },
+            "Invalid message ID"
+          )
+        );
+    }
+
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      return res
+        .status(404)
+        .json(
+          GenRes(404, null, { error: "Message not found" }, "Message not found")
+        );
+    }
+
+    // Only sender can delete for everyone
+    if (message.sender._id.toString() !== userId.toString()) {
+      return res
+        .status(403)
+        .json(
+          GenRes(
+            403,
+            null,
+            { error: "Unauthorized" },
+            "Only sender can delete for everyone"
+          )
+        );
+    }
+
+    // Delete message completely
+    await ChatMessage.findByIdAndUpdate(messageId, {
+      $set: { deletedBySender: true, deletedByReceiver: true },
+    });
+
+    // Notify receiver through socket if online
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.receiver._id).emit("message_deleted", { messageId });
+    }
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Message deleted for everyone"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+// Delete entire conversation for me
+const DeleteConversation = async (req, res) => {
+  try {
+    const otherUserId = req.params.userId;
+    const userId = req.user._id;
+
+    if (!isValidObjectId(otherUserId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(400, null, { error: "Invalid user ID" }, "Invalid user ID")
+        );
+    }
+
+    // Update all messages in the conversation
+    await ChatMessage.updateMany(
+      {
+        $or: [
+          { "sender._id": userId, "receiver._id": otherUserId },
+          { "sender._id": otherUserId, "receiver._id": userId },
+        ],
+      },
+      {
+        $set: {
+          deletedBySender: {
+            $cond: [{ $eq: ["$sender._id", userId] }, true, "$deletedBySender"],
+          },
+          deletedByReceiver: {
+            $cond: [
+              { $eq: ["$receiver._id", userId] },
+              true,
+              "$deletedByReceiver",
+            ],
+          },
+        },
+      }
+    );
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Conversation deleted"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+module.exports = {
+  GetMessages,
+  GetChats,
+  DeleteMessageForMe,
+  DeleteMessageForEveryone,
+  DeleteConversation,
+};

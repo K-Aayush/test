@@ -29,7 +29,7 @@ const MessageSchema = new Schema(
   { timestamps: true }
 );
 
-// Encryption/Decryption logic (unchanged)
+// Encryption/Decryption methods
 MessageSchema.pre("save", function (next) {
   if (this.isModified("message")) {
     this.message = CryptoJS.AES.encrypt(
@@ -48,6 +48,5 @@ MessageSchema.methods.decryptMessage = function () {
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 
-// Fix model name
 const ChatMessage = models?.ChatMessage || model("ChatMessage", MessageSchema);
 module.exports = ChatMessage;
