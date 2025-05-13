@@ -10,6 +10,7 @@ const ShopSchema = new Schema({
   content: String,
   images: gen.required([String]),
   stock: gen.required(Number),
+  category: gen.required(String),
   vendor: {
     _id: gen.required(String),
     email: gen.required(String),

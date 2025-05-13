@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const { adminMiddleware } = require("../../middlewares/adminMiddleware");
+const { vendorMiddleware } = require("../../middlewares/vendorMiddleware");
 const basicMiddleware = require("../../middlewares/basicMiddleware");
 const ShopFile = require("../../utils/fileProcessor/multer.shop");
 const {
@@ -19,6 +20,19 @@ router.get("/get-shop/:id", basicMiddleware, SingleShop);
 
 router.get("/admin-list-shops/:page", adminMiddleware, ListShop);
 router.get("/admin-get-shop/:id", adminMiddleware, SingleShop);
+
+// Vendor routes
+router.get("/vendor-list-shops/:page", vendorMiddleware, ListShop);
+router.get("/vendor-get-shop/:id", vendorMiddleware, SingleShop);
+router.post("/vendor-add-shop", vendorMiddleware, AddShop);
+router.post("/vendor-update-shop/:id", vendorMiddleware, ReStock);
+router.delete("/vendor-delete-shop/:id", vendorMiddleware, DeleteShop);
+router.post(
+  "/vendor-upload-shop-images",
+  vendorMiddleware,
+  ShopFile.any(),
+  MultipleFiles
+);
 
 router.post(
   "/upload-shop-images",

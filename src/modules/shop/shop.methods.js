@@ -3,6 +3,7 @@ const GenRes = require("../../utils/routers/GenRes");
 const path = require("path");
 const Cart = require("./cart.model");
 const { isValidObjectId } = require("mongoose");
+const fs = require("fs");
 
 function shuffleArray(array) {
   // Fisher-Yates Shuffle
@@ -17,9 +18,14 @@ const ListShop = async (req, res) => {
   try {
     const query = req?.query?.search;
     const page = parseInt(req?.params?.page || "0") || 0;
-    const fetchLimit = 20; // Max number of recent contents to fetch
+    const fetchLimit = 20;
 
     const filters = {};
+
+    // Add vendor filter if vendor is making the request
+    if (req.vendor) {
+      filters["vendor._id"] = req.vendor._id;
+    }
 
     if (query) {
       filters.$or = [
@@ -28,14 +34,13 @@ const ListShop = async (req, res) => {
       ];
     }
 
-    // Fetch latest contents only (limited)
     const recentProducts = await Shop.find(filters)
       .sort({ _id: -1 })
       .skip(page * fetchLimit)
       .limit(fetchLimit)
       .select("-content")
       .lean();
-    // Combine, shuffle, and paginate
+
     const mixedProduct = shuffleArray(recentProducts);
 
     const response = GenRes(
@@ -58,7 +63,15 @@ const SingleShop = async (req, res) => {
       const response = GenRes(400, null, null, "Missing product id");
       return res.status(400).json(response);
     }
-    const data = await Shop.findOne({ _id }).lean();
+
+    const filters = { _id };
+
+    // Add vendor check if vendor is making the request
+    if (req.vendor) {
+      filters["vendor._id"] = req.vendor._id;
+    }
+
+    const data = await Shop.findOne(filters).lean();
     if (!data) {
       const response = GenRes(404, null, null, "No data found");
       return res.status(404).json(response);
@@ -74,11 +87,21 @@ const SingleShop = async (req, res) => {
 const AddShop = async (req, res) => {
   try {
     const data = req?.body;
-    console.log(data);
+
     if (!data) {
       const response = GenRes(400, null, null, "Missing data");
       return res.status(400).json(response);
     }
+
+    // Add vendor information if vendor is making the request
+    if (req.vendor) {
+      data.vendor = {
+        _id: req.vendor._id,
+        email: req.vendor.email,
+        businessName: req.vendor.businessName,
+      };
+    }
+
     const newShop = new Shop(data);
     await newShop.save();
     const response = GenRes(201, newShop, null, "New shop added");
@@ -88,6 +111,7 @@ const AddShop = async (req, res) => {
     return res.status(500).json(response);
   }
 };
+
 const DeleteShop = async (req, res) => {
   try {
     const _id = req?.params?.id;
@@ -95,7 +119,15 @@ const DeleteShop = async (req, res) => {
       const response = GenRes(400, null, null, "NO id found");
       return res.status(400).json(response);
     }
-    const deleted = await Shop.findOneAndDelete({ _id }, { new: true });
+
+    const filters = { _id };
+
+    // Add vendor check if vendor is making the request
+    if (req.vendor) {
+      filters["vendor._id"] = req.vendor._id;
+    }
+
+    const deleted = await Shop.findOneAndDelete(filters);
     if (!deleted) {
       const response = GenRes(404, null, null, "NO shop found");
       return res.status(404).json(response);
@@ -106,7 +138,7 @@ const DeleteShop = async (req, res) => {
     for (const items of deleted?.images) {
       try {
         const imagePath = path.join(process.cwd(), items?.slice(1));
-        await fs.unlink(imagePath);
+        await fs.promises.unlink(imagePath);
       } catch (error) {
         console.log(error);
         failed.push(items);
@@ -146,7 +178,7 @@ const AddToCart = async (req, res) => {
 const RemoveFromCart = async (req, res) => {
   try {
     const _id = req?.params?.id;
-    if (!_id || !isValidObjectId) {
+    if (!_id || !isValidObjectId(_id)) {
       return res.status(404).json(GenRes(404, null, null, "Invalid"));
     }
     const user = req?.user;
@@ -167,7 +199,7 @@ const RemoveFromCart = async (req, res) => {
 const GetCart = async (req, res) => {
   try {
     const email = req?.user?.email;
-    const data = await Cart.find({ email });
+    const data = await Cart.find({ email }).populate("product");
     const response = GenRes(200, data, null, "Cart");
     return res.status(200).json(response);
   } catch (error) {
@@ -177,14 +209,12 @@ const GetCart = async (req, res) => {
 
 const MultipleFiles = async (req, res) => {
   try {
-    console.log("FILES : ", req?.files);
     const file_locations = req?.file_locations;
-    console.log(file_locations);
     const response = GenRes(
       200,
       file_locations,
       null,
-      "Uplodaed Successfully!"
+      "Uploaded Successfully!"
     );
     return res.status(200).json(response);
   } catch (error) {
@@ -192,10 +222,10 @@ const MultipleFiles = async (req, res) => {
     return res.status(500).json(response);
   }
 };
+
 const DeleteFiles = async (req, res) => {
   try {
     const filesList = req?.body;
-    console.log(filesList);
     if (!filesList || !Array.isArray(filesList) || filesList.length === 0) {
       const response = GenRes(
         400,
@@ -235,20 +265,30 @@ const ReStock = async (req, res) => {
   try {
     const _id = req?.params?.id;
     const { stock } = req?.body;
-    console.log(stock)
 
     if (!_id || !isValidObjectId(_id)) {
-      const respone = GenRes(
+      const response = GenRes(
         400,
         null,
         new Error("Invalid ID"),
         "Please provide valid ID"
       );
-      return res.status(400).json(respone);
+      return res.status(400).json(response);
     }
 
-    const data = await Shop.findOneAndUpdate({ _id }, { $set: { stock } });
-    return res.status(200).json(GenRes(200, data, null, "Updated One"));
+    const filters = { _id };
+
+    // Add vendor check if vendor is making the request
+    if (req.vendor) {
+      filters["vendor._id"] = req.vendor._id;
+    }
+
+    const data = await Shop.findOneAndUpdate(filters, { $set: { stock } });
+    if (!data) {
+      return res.status(404).json(GenRes(404, null, null, "Product not found"));
+    }
+
+    return res.status(200).json(GenRes(200, data, null, "Updated stock"));
   } catch (error) {
     const response = GenRes(500, null, error, error?.message);
     return res.status(500).json(response);
@@ -266,4 +306,4 @@ module.exports = {
   DeleteFiles,
   SingleShop,
   ReStock,
-}; // eslint-disable-line no-unused-vars
+};
