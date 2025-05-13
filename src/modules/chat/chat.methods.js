@@ -191,7 +191,161 @@ const GetChats = async (req, res) => {
   }
 };
 
+// Delete message for me
+const DeleteMessageForMe = async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const userId = req.user._id;
+
+    if (!isValidObjectId(messageId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid message ID" },
+            "Invalid message ID"
+          )
+        );
+    }
+
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      return res
+        .status(404)
+        .json(
+          GenRes(404, null, { error: "Message not found" }, "Message not found")
+        );
+    }
+
+    // Update deletion flag based on user role (sender/receiver)
+    const updateField =
+      message.sender._id.toString() === userId.toString()
+        ? { deletedBySender: true }
+        : { deletedByReceiver: true };
+
+    await ChatMessage.findByIdAndUpdate(messageId, { $set: updateField });
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Message deleted for you"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+// Delete message for everyone
+const DeleteMessageForEveryone = async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    const userId = req.user._id;
+
+    if (!isValidObjectId(messageId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(
+            400,
+            null,
+            { error: "Invalid message ID" },
+            "Invalid message ID"
+          )
+        );
+    }
+
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      return res
+        .status(404)
+        .json(
+          GenRes(404, null, { error: "Message not found" }, "Message not found")
+        );
+    }
+
+    // Only sender can delete for everyone
+    if (message.sender._id.toString() !== userId.toString()) {
+      return res
+        .status(403)
+        .json(
+          GenRes(
+            403,
+            null,
+            { error: "Unauthorized" },
+            "Only sender can delete for everyone"
+          )
+        );
+    }
+
+    // Delete message completely
+    await ChatMessage.findByIdAndUpdate(messageId, {
+      $set: { deletedBySender: true, deletedByReceiver: true },
+    });
+
+    // Notify receiver through socket if online
+    const io = req.app.get("io");
+    if (io) {
+      io.to(message.receiver._id).emit("message_deleted", { messageId });
+    }
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Message deleted for everyone"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
+// Delete entire conversation for me
+const DeleteConversation = async (req, res) => {
+  try {
+    const otherUserId = req.params.userId;
+    const userId = req.user._id;
+
+    if (!isValidObjectId(otherUserId)) {
+      return res
+        .status(400)
+        .json(
+          GenRes(400, null, { error: "Invalid user ID" }, "Invalid user ID")
+        );
+    }
+
+    // Update all messages in the conversation
+    await ChatMessage.updateMany(
+      {
+        $or: [
+          { "sender._id": userId, "receiver._id": otherUserId },
+          { "sender._id": otherUserId, "receiver._id": userId },
+        ],
+      },
+      {
+        $set: {
+          deletedBySender: {
+            $cond: [{ $eq: ["$sender._id", userId] }, true, "$deletedBySender"],
+          },
+          deletedByReceiver: {
+            $cond: [
+              { $eq: ["$receiver._id", userId] },
+              true,
+              "$deletedByReceiver",
+            ],
+          },
+        },
+      }
+    );
+
+    return res
+      .status(200)
+      .json(GenRes(200, null, null, "Conversation deleted"));
+  } catch (error) {
+    return res.status(500).json(GenRes(500, null, error, error?.message));
+  }
+};
+
 module.exports = {
   GetMessages,
   GetChats,
+  DeleteMessageForMe,
+  DeleteMessageForEveryone,
+  DeleteConversation,
 };
