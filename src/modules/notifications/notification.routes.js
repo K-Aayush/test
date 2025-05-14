@@ -3,11 +3,13 @@ const basicMiddleware = require("../../middlewares/basicMiddleware");
 const {
   GetNotifications,
   MarkAsRead,
+  MarkAllAsRead,
   DeleteNotification,
 } = require("./notification.methods");
 
 router.get("/notifications", basicMiddleware, GetNotifications);
 router.post("/notifications/mark-read", basicMiddleware, MarkAsRead);
+router.post("/notifications/mark-all-read", basicMiddleware, MarkAllAsRead);
 router.delete("/notifications/:id", basicMiddleware, DeleteNotification);
 
 module.exports = router;
