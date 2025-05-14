@@ -38,4 +38,5 @@ router.get("/list-admin-contents/:page", basicMiddleware, ListContents);
 // make delete
 router.delete("/admin-delete-content/:id", basicMiddleware, DeleteContent);
 
+
 module.exports = router;

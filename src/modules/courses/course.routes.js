@@ -3,7 +3,7 @@ const AdminFiles = require("../../utils/fileProcessor/multer.courses");
 const { AddCourse, DelCourses } = require("./course.admin.methods");
 const { MultipleFiles, DeleteFiles } = require("./course.file");
 const ListCourses = require("./courses.list");
-const { GetCourse } = require("./courses.methods");
+// const { GetCourse } = require("./courses.methods");
 
 const route = require("express").Router();
 
@@ -34,7 +34,7 @@ route.get("/list-courses/:page", basicMiddleware, ListCourses);
 route.get("/admin-list-courses/:page", basicMiddleware, ListCourses);
 
 // admin individual
-route.get("/get-course/:id", basicMiddleware, GetCourse);
-route.get("/admin-get-course/:id", basicMiddleware, GetCourse);
+// route.get("/get-course/:id", basicMiddleware, GetCourse);
+// route.get("/admin-get-course/:id", basicMiddleware, GetCourse);
 
 module.exports = route;
