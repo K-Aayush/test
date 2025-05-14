@@ -70,7 +70,6 @@ const LikeHandler = async (req, res) => {
       "Like/Unlike operation completed!"
     );
     return res.status(200).json(response);
-
   } catch (error) {
     const response = GenRes(
       500,
