@@ -1,4 +1,3 @@
-const { adminMiddleware } = require("../../middlewares/adminMiddleware.js");
 const basicMiddleware = require("../../middlewares/basicMiddleware");
 const UserFiles = require("../../utils/fileProcessor/multer.users.js");
 const { MultipleFiles, SingleFile, DeleteFiles } = require("./contents.files");
@@ -6,7 +5,7 @@ const ListContents = require("./contents.list.js");
 const {
   AddContent,
   UpdateContents,
-  DeleteContent
+  DeleteContent,
 } = require("./contents.methods");
 
 const router = require("express").Router();
@@ -33,13 +32,10 @@ router.delete("/delete-content/:id", basicMiddleware, DeleteContent);
 // get data
 router.get("/list-contents/:page", basicMiddleware, ListContents);
 
-
-
-
 // admin
-router.get("/list-admin-contents/:page", adminMiddleware, ListContents);
+router.get("/list-admin-contents/:page", basicMiddleware, ListContents);
 
 // make delete
-router.delete("/admin-delete-content/:id", adminMiddleware, DeleteContent);
+router.delete("/admin-delete-content/:id", basicMiddleware, DeleteContent);
 
 module.exports = router;
