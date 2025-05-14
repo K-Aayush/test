@@ -1,45 +1,25 @@
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const User = require("../user/user.model");
-const { transporter } = require("../../config/Mailer");
-
-const SaveAdmin = async (req, res) => {
-  try {
-    const clientToken = req?.params?.token;
-    if (!clientToken) throw new Error("Token not found");
-
-    const data = jwt.verify(clientToken, process.env.JWT_GENERATE);
-    if (!data || !data.email) throw new Error("Invalid or expired token");
-
-    const user = await User.findOne({ email: data.email, role: "admin" });
-    if (!user) throw new Error("Admin not found");
-
-    if (user.isVerified) {
-      return res
-        .status(301)
-        .redirect(`${process.env.WEB_HOST}/already-verified`);
-    }
-
-    user.isVerified = true;
-    await user.save();
-
-    return res
-      .status(301)
-      .redirect(`${process.env.WEB_HOST}/registration-success`);
-  } catch (error) {
-    return res
-      .status(301)
-      .redirect(
-        `${
-          process.env.WEB_HOST
-        }/registration-failed?message=${encodeURIComponent(error?.message)}`
-      );
-  }
-};
+const transporter = require("../../config/Mailer");
+const GenRes = require("../../utils/routers/GenRes");
 
 //method to add vendor
 const AddVendor = async (req, res) => {
   try {
+    // Check if user is admin
+    if (req.user.role !== "admin") {
+      return res
+        .status(403)
+        .json(
+          GenRes(
+            403,
+            null,
+            { error: "Not authorized" },
+            "Only admins can add vendors"
+          )
+        );
+    }
+
     const {
       email,
       password,
@@ -79,12 +59,13 @@ const AddVendor = async (req, res) => {
       phone,
       dob: new Date(dob),
       level: "bronze",
+      role: "vendor",
     });
 
     //save new vendor
     await newVendor.save();
 
-    //send credintials to email
+    //send credentials to email
     await transporter.sendMail({
       from: process.env.EMAIL,
       to: email,
@@ -118,4 +99,4 @@ const AddVendor = async (req, res) => {
   }
 };
 
-module.exports = { SaveAdmin, AddVendor };
+module.exports = { AddVendor };
