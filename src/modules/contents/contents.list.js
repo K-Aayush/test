@@ -18,7 +18,7 @@ const ListContents = async (req, res) => {
     const queries = req?.query;
     const page = parseInt(req?.params?.page || "0") || 0;
     const pageSize = 10;
-    const fetchLimit = 20; // Max number of recent contents to fetch
+    const lastId = req.query.lastId; // For cursor-based pagination
 
     const filters = {};
     const authenQuery = "email,name,search".split(",");
@@ -40,6 +40,11 @@ const ListContents = async (req, res) => {
       }
     }
 
+    // Add cursor-based pagination
+    if (lastId) {
+      filters._id = { $lt: lastId };
+    }
+
     // Get followings only if no filter applied
     let followingEmails = [];
     if (Object.keys(filters)?.length === 0) {
@@ -47,17 +52,20 @@ const ListContents = async (req, res) => {
       followingEmails = followings.map((item) => item.following.email);
     }
 
-    // Fetch latest contents only (limited)
-    const recentContents = await Content.find({})
+    // Fetch contents with cursor-based pagination
+    const recentContents = await Content.find(filters)
       .sort({ _id: -1 })
-      .limit(fetchLimit)
+      .limit(pageSize + 1) // Fetch one extra to determine if there are more
       .lean();
 
     // Split into relevant and irrelevant
     const relevant = [];
     const irrelevant = [];
 
-    for (const content of recentContents) {
+    const hasMore = recentContents.length > pageSize;
+    const contents = hasMore ? recentContents.slice(0, -1) : recentContents;
+
+    for (const content of contents) {
       const authorEmail = content.author?.email || "";
       const authorName = content.author?.name || "";
 
@@ -96,16 +104,12 @@ const ListContents = async (req, res) => {
       }
     }
 
-    // Combine, shuffle, and paginate
+    // Combine and shuffle
     const mixedContent = shuffleArray([...relevant, ...irrelevant]);
-    const paginated = mixedContent.slice(
-      page * pageSize,
-      (page + 1) * pageSize
-    );
 
     // Attach likes, comments, and liked status
     const finalCall = await Promise.all(
-      paginated.map(async (item) => {
+      mixedContent.map(async (item) => {
         const find = { uid: item?._id, type: "content" };
         const likes = await Likes.countDocuments(find);
         const comments = await Comments.countDocuments(find);
@@ -130,7 +134,11 @@ const ListContents = async (req, res) => {
 
     const response = GenRes(
       200,
-      finalCall,
+      {
+        contents: finalCall,
+        hasMore,
+        nextCursor: hasMore ? contents[contents.length - 1]._id : null,
+      },
       null,
       "Responding shuffled & paginated content"
     );
