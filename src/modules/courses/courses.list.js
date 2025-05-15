@@ -13,6 +13,21 @@ function shuffleArray(array) {
   return array;
 }
 
+const GenRes = require("../../utils/routers/GenRes");
+const Follow = require("../follow/follow.model");
+const Likes = require("../likes/likes.model");
+const Comments = require("../comments/comments.model");
+const Content = require("../contents/contents.model");
+
+function shuffleArray(array) {
+  // Fisher-Yates Shuffle
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
 const ListContents = async (req, res) => {
   try {
     const queries = req?.query;
@@ -134,11 +149,7 @@ const ListContents = async (req, res) => {
 
     const response = GenRes(
       200,
-      {
-        contents: finalCall,
-        hasMore,
-        nextCursor: hasMore ? contents[contents.length - 1]._id : null,
-      },
+      finalCall,
       null,
       "Responding shuffled & paginated content"
     );
