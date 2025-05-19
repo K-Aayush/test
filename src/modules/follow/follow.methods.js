@@ -8,12 +8,13 @@ const UpdateFollow = async (req, res) => {
   try {
     const useremail = req?.user?.email;
     const followemail = req?.body?.email;
+    const action = req?.body?.action;
 
     if (!useremail || !followemail) {
       const response = GenRes(
         400,
         null,
-        { error: "required details not found!" },
+        { error: "Required details not found!" },
         "Required Details Not Found!"
       );
       return res.status(400).json(response);
@@ -22,7 +23,6 @@ const UpdateFollow = async (req, res) => {
     const follower = await User.findOne({ email: useremail }).select(
       "_id email name picture"
     );
-
     if (!follower) {
       const response = GenRes(
         404,
@@ -46,26 +46,55 @@ const UpdateFollow = async (req, res) => {
       return res.status(404).json(response);
     }
 
-    const exists = await Follow.findOneAndDelete({
+    const followExists = await Follow.findOne({
       "follower.email": useremail,
       "following.email": followemail,
     });
 
-    if (!exists) {
+    if (action === "unfollow") {
+      if (!followExists) {
+        const response = GenRes(
+          400,
+          null,
+          { error: "Not following this user!" },
+          "Not following this user"
+        );
+        return res.status(400).json(response);
+      }
+      await Follow.deleteOne({
+        "follower.email": useremail,
+        "following.email": followemail,
+      });
+      const response = GenRes(
+        200,
+        { follower, following },
+        null,
+        "Unfollowed Successfully!"
+      );
+      return res.status(200).json(response);
+    } else {
+      if (followExists) {
+        const response = GenRes(
+          400,
+          null,
+          { error: "Already following this user!" },
+          "Already following this user"
+        );
+        return res.status(400).json(response);
+      }
       const newFollow = new Follow({
         follower: follower?.toObject(),
         following: following?.toObject(),
       });
       await newFollow.save();
 
-      // Check if mutual follow exists
+      // Check for mutual follow and handle chat
       const mutualFollow = await Follow.findOne({
         "follower.email": followemail,
         "following.email": useremail,
       });
 
       if (mutualFollow) {
-        // Create welcome message from system
         const welcomeMessage = new ChatMessage({
           sender: follower.toObject(),
           receiver: following.toObject(),
@@ -74,39 +103,91 @@ const UpdateFollow = async (req, res) => {
         });
         await welcomeMessage.save();
 
-        // Notify both users through Socket.IO
-        const io = req.app.get("io");
-        if (io) {
-          // Refresh chat lists
-          io.to(follower._id.toString()).emit("refresh_chat_list");
-          io.to(following._id.toString()).emit("refresh_chat_list");
+        const aedes = req.app.get("aedes");
+        if (aedes) {
+          const chatTopic = getChatTopic(
+            follower._id.toString(),
+            following._id.toString()
+          );
 
-          // Send new chat notifications
-          io.to(follower._id.toString()).emit("new_chat", {
+          // Notify both users to refresh chat list
+          const refreshPayload = {
+            type: "refresh_chat_list",
+          };
+          aedes.publish({
+            topic: `user/${follower._id}/messages`,
+            payload: JSON.stringify(refreshPayload),
+            qos: 0,
+          });
+          aedes.publish({
+            topic: `user/${following._id}/messages`,
+            payload: JSON.stringify(refreshPayload),
+            qos: 0,
+          });
+
+          // Send new chat notification to both users
+          const newChatPayloadFollower = {
+            type: "new_chat",
             user: following.toObject(),
             lastMessage: welcomeMessage.toObject(),
             unreadCount: 0,
-          });
-
-          io.to(following._id.toString()).emit("new_chat", {
+          };
+          const newChatPayloadFollowing = {
+            type: "new_chat",
             user: follower.toObject(),
             lastMessage: welcomeMessage.toObject(),
             unreadCount: 1,
+          };
+          aedes.publish({
+            topic: `user/${follower._id}/messages`,
+            payload: JSON.stringify(newChatPayloadFollower),
+            qos: 0,
           });
+          aedes.publish({
+            topic: `user/${following._id}/messages`,
+            payload: JSON.stringify(newChatPayloadFollowing),
+            qos: 0,
+          });
+
+          // Subscribe both users to the chat topic if online
+          const onlineClients = aedes.onlineClients || new Map(); // Access onlineClients from Aedes instance
+          if (onlineClients.has(follower._id.toString())) {
+            const followerClient =
+              aedes.clients[onlineClients.get(follower._id.toString())];
+            if (followerClient) {
+              followerClient.subscribe({ topic: chatTopic, qos: 0 });
+            }
+          }
+          if (onlineClients.has(following._id.toString())) {
+            const followingClient =
+              aedes.clients[onlineClients.get(following._id.toString())];
+            if (followingClient) {
+              followingClient.subscribe({ topic: chatTopic, qos: 0 });
+            }
+          }
+
+          // Update userChats for both users
+          if (!aedes.userChats.has(follower._id.toString())) {
+            aedes.userChats.set(follower._id.toString(), new Set());
+          }
+          if (!aedes.userChats.has(following._id.toString())) {
+            aedes.userChats.set(following._id.toString(), new Set());
+          }
+          aedes.userChats.get(follower._id.toString()).add(chatTopic);
+          aedes.userChats.get(following._id.toString()).add(chatTopic);
         }
       }
+
+      const response = GenRes(
+        200,
+        { follower, following },
+        null,
+        "Followed Successfully!"
+      );
+      return res.status(200).json(response);
     }
-
-    const response = GenRes(
-      200,
-      { follower, following },
-      null,
-      exists ? "Unfollowed Successfully!" : "Followed Successfully!"
-    );
-
-    return res.status(200).json(response);
   } catch (error) {
-    const response = GenRes(500, null, { error: error }, error?.message);
+    const response = GenRes(500, null, { error: error.message }, error.message);
     return res.status(500).json(response);
   }
 };
