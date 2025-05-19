@@ -4,6 +4,12 @@ const Follow = require("./follow.model");
 const { isValidObjectId } = require("mongoose");
 const ChatMessage = require("../chat/chat.model");
 
+// Generate unique chat topic for two users
+const getChatTopic = (user1Id, user2Id) => {
+  const ids = [user1Id, user2Id].sort();
+  return `chat/${ids[0]}/${ids[1]}`;
+};
+
 const UpdateFollow = async (req, res) => {
   try {
     const useremail = req?.user?.email;
@@ -51,6 +57,8 @@ const UpdateFollow = async (req, res) => {
       "following.email": followemail,
     });
 
+    const aedes = req.app.get("aedes");
+
     if (action === "unfollow") {
       if (!followExists) {
         const response = GenRes(
@@ -65,6 +73,41 @@ const UpdateFollow = async (req, res) => {
         "follower.email": useremail,
         "following.email": followemail,
       });
+
+      // Notify both users of follow status update
+      if (aedes) {
+        const mutualFollow = await Follow.findOne({
+          "follower.email": followemail,
+          "following.email": useremail,
+        });
+
+        aedes.publish({
+          topic: `user/${follower._id}/follow_status`,
+          payload: JSON.stringify({
+            type: "follow_status_update",
+            userId: following._id.toString(),
+            userEmail: following.email,
+            userName: following.name,
+            isFollowing: false,
+            isFollowedBy: !!mutualFollow,
+          }),
+          qos: 0,
+        });
+
+        aedes.publish({
+          topic: `user/${following._id}/follow_status`,
+          payload: JSON.stringify({
+            type: "follow_status_update",
+            userId: follower._id.toString(),
+            userEmail: follower.email,
+            userName: follower.name,
+            isFollowing: !!mutualFollow,
+            isFollowedBy: false,
+          }),
+          qos: 0,
+        });
+      }
+
       const response = GenRes(
         200,
         { follower, following },
@@ -88,6 +131,40 @@ const UpdateFollow = async (req, res) => {
       });
       await newFollow.save();
 
+      // Notify both users of follow status update
+      if (aedes) {
+        const mutualFollow = await Follow.findOne({
+          "follower.email": followemail,
+          "following.email": useremail,
+        });
+
+        aedes.publish({
+          topic: `user/${follower._id}/follow_status`,
+          payload: JSON.stringify({
+            type: "follow_status_update",
+            userId: following._id.toString(),
+            userEmail: following.email,
+            userName: following.name,
+            isFollowing: true,
+            isFollowedBy: !!mutualFollow,
+          }),
+          qos: 0,
+        });
+
+        aedes.publish({
+          topic: `user/${following._id}/follow_status`,
+          payload: JSON.stringify({
+            type: "follow_status_update",
+            userId: follower._id.toString(),
+            userEmail: follower.email,
+            userName: follower.name,
+            isFollowing: !!mutualFollow,
+            isFollowedBy: true,
+          }),
+          qos: 0,
+        });
+      }
+
       // Check for mutual follow and handle chat
       const mutualFollow = await Follow.findOne({
         "follower.email": followemail,
@@ -103,41 +180,46 @@ const UpdateFollow = async (req, res) => {
         });
         await welcomeMessage.save();
 
-        const aedes = req.app.get("aedes");
         if (aedes) {
           const chatTopic = getChatTopic(
             follower._id.toString(),
             following._id.toString()
           );
 
-          // Notify both users to refresh chat list
-          const refreshPayload = {
-            type: "refresh_chat_list",
-          };
-          aedes.publish({
-            topic: `user/${follower._id}/messages`,
-            payload: JSON.stringify(refreshPayload),
-            qos: 0,
-          });
-          aedes.publish({
-            topic: `user/${following._id}/messages`,
-            payload: JSON.stringify(refreshPayload),
-            qos: 0,
-          });
-
-          // Send new chat notification to both users
+          // Send new chat notification to both users with full chat data
           const newChatPayloadFollower = {
             type: "new_chat",
-            user: following.toObject(),
-            lastMessage: welcomeMessage.toObject(),
-            unreadCount: 0,
+            chat: {
+              user: {
+                _id: following._id,
+                email: following.email,
+                name: following.name,
+                picture: following.picture || "",
+              },
+              lastMessage: {
+                ...welcomeMessage.toObject(),
+                message: welcomeMessage.decryptMessage(),
+              },
+              unreadCount: 0,
+            },
           };
           const newChatPayloadFollowing = {
             type: "new_chat",
-            user: follower.toObject(),
-            lastMessage: welcomeMessage.toObject(),
-            unreadCount: 1,
+            chat: {
+              user: {
+                _id: follower._id,
+                email: follower.email,
+                name: follower.name,
+                picture: follower.picture || "",
+              },
+              lastMessage: {
+                ...welcomeMessage.toObject(),
+                message: welcomeMessage.decryptMessage(),
+              },
+              unreadCount: 1,
+            },
           };
+
           aedes.publish({
             topic: `user/${follower._id}/messages`,
             payload: JSON.stringify(newChatPayloadFollower),
@@ -150,7 +232,7 @@ const UpdateFollow = async (req, res) => {
           });
 
           // Subscribe both users to the chat topic if online
-          const onlineClients = aedes.onlineClients || new Map(); // Access onlineClients from Aedes instance
+          const onlineClients = aedes.onlineClients || new Map();
           if (onlineClients.has(follower._id.toString())) {
             const followerClient =
               aedes.clients[onlineClients.get(follower._id.toString())];
@@ -186,6 +268,82 @@ const UpdateFollow = async (req, res) => {
       );
       return res.status(200).json(response);
     }
+  } catch (error) {
+    const response = GenRes(500, null, { error: error.message }, error.message);
+    return res.status(500).json(response);
+  }
+};
+
+// Check follow status between two users
+const CheckFollowStatus = async (req, res) => {
+  try {
+    const useremail = req?.user?.email;
+    const targetemail = req?.query?.email;
+
+    if (!useremail || !targetemail) {
+      const response = GenRes(
+        400,
+        null,
+        { error: "Required details not found!" },
+        "Required Details Not Found!"
+      );
+      return res.status(400).json(response);
+    }
+
+    const user = await User.findOne({ email: useremail }).select(
+      "_id email name picture"
+    );
+    if (!user) {
+      const response = GenRes(
+        404,
+        null,
+        { error: "User not found!" },
+        "User not found"
+      );
+      return res.status(404).json(response);
+    }
+
+    const targetUser = await User.findOne({ email: targetemail }).select(
+      "_id email name picture"
+    );
+    if (!targetUser) {
+      const response = GenRes(
+        404,
+        null,
+        { error: "Target user not found!" },
+        "Target user not found"
+      );
+      return res.status(404).json(response);
+    }
+
+    // Check follow relationships
+    const [isFollowing, isFollowedBy] = await Promise.all([
+      Follow.findOne({
+        "follower.email": useremail,
+        "following.email": targetemail,
+      }),
+      Follow.findOne({
+        "follower.email": targetemail,
+        "following.email": useremail,
+      }),
+    ]);
+
+    const response = GenRes(
+      200,
+      {
+        user: {
+          _id: targetUser._id,
+          email: targetUser.email,
+          name: targetUser.name,
+          picture: targetUser.picture,
+        },
+        isFollowing: !!isFollowing,
+        isFollowedBy: !!isFollowedBy,
+      },
+      null,
+      "Follow status retrieved successfully"
+    );
+    return res.status(200).json(response);
   } catch (error) {
     const response = GenRes(500, null, { error: error.message }, error.message);
     return res.status(500).json(response);
@@ -356,6 +514,7 @@ const GetUsersFollowing = async (req, res) => {
 
 module.exports = {
   UpdateFollow,
+  CheckFollowStatus,
   ListFollowers,
   ListFollowings,
   GetUsersFollowers,
