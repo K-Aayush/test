@@ -4,26 +4,39 @@ const { tokenGen } = require("../utils/auth/tokenHandler");
 const User = require("../modules/user/user.model");
 
 const firebaseMiddleware = async (req, res, next) => {
-  req.user = null;
   try {
-    const token = req?.headers?.authorization;
+    const rawToken = req.headers.authorization;
+    const token = rawToken?.startsWith("Bearer ")
+      ? rawToken.split("Bearer ")[1]
+      : rawToken;
+
     if (!token) {
-      throw new Error("Token not found!");
+      return res.status(401).json(GenRes(401, null, null, "Token not found!"));
     }
 
-    // Decode Firebase token
     const decodedToken = await admin.auth().verifyIdToken(token);
-    if (!decodedToken) {
-      throw new Error("Firebase failed to parse!");
+
+    if (!decodedToken || !decodedToken.email) {
+      return res
+        .status(401)
+        .json(GenRes(401, null, null, "Invalid Firebase token"));
     }
 
-    // Find or create user
     const user = await User.findOne({ email: decodedToken.email });
+
     if (!user) {
-      throw new Error("User not registered!");
+      req.user = {
+        email: decodedToken.email,
+        name: decodedToken.name || decodedToken.email.split("@")[0],
+        picture: decodedToken.picture || "",
+        uid: decodedToken.uid,
+        dob: new Date("2000-01-01"),
+        phone: "Not provided",
+        role: "user",
+      };
+      return next();
     }
 
-    // Generate JWT tokens
     const tokenData = {
       _id: user._id.toString(),
       email: user.email,
@@ -32,20 +45,24 @@ const firebaseMiddleware = async (req, res, next) => {
     };
 
     const { accessToken, refreshToken } = tokenGen(tokenData);
-
-    // Update user's refresh token
     user.refreshToken = refreshToken;
     await user.save();
 
-    // Add tokens to response headers
     res.set("X-Access-Token", accessToken);
     res.set("X-Refresh-Token", refreshToken);
 
-    req.user = decodedToken;
+    req.user = {
+      ...decodedToken,
+      _id: user._id,
+      role: "user",
+    };
+
     return next();
   } catch (error) {
-    const response = GenRes(500, null, error, error?.message);
-    return res.status(500).json(response);
+    console.error("Firebase Middleware Error:", error);
+    return res
+      .status(401)
+      .json(GenRes(401, null, error, error.message || "Unauthorized"));
   }
 };
 
@@ -61,7 +78,10 @@ const registerMiddleware = async (req, _, next) => {
     if (!decodedToken) {
       throw new Error("Firebase failed to parse!");
     }
-    req.user = decodedToken;
+    req.user = {
+      ...decodedToken,
+      role: "user",
+    };
     return next();
   } catch (error) {
     req.user = null;
