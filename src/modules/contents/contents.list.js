@@ -12,13 +12,8 @@ function getTimeDecayScore(createdAt) {
   return 1 / (1 + Math.sqrt(hoursAge));
 }
 
-// Helper function to calculate engagement score
-function calculateEngagementScore(likes, comments, views = 0) {
-  return likes * 1 + comments * 2 + views * 0.1;
-}
-
 // Helper function to calculate content quality score
-function calculateQualityScore(content) {
+async function calculateQualityScore(content) {
   let score = 1;
 
   // Boost content with media
@@ -26,22 +21,12 @@ function calculateQualityScore(content) {
     score *= 1.2;
   }
 
-  // Boost verified user content
-  if (content.author.isVerified) {
-    score *= 1.3;
-  }
+  // Fetch author details from User model
+  const author = await User.findOne({ email: content.author.email }).lean();
 
   // Boost based on author's level
-  switch (content.author.level) {
-    case "gold":
-      score *= 1.5;
-      break;
-    case "silver":
-      score *= 1.3;
-      break;
-    case "bronze":
-      score *= 1.1;
-      break;
+  if (author?.level === "bronze") {
+    score *= 1.1;
   }
 
   return score;
@@ -111,6 +96,7 @@ const ListContents = async (req, res) => {
             $add: [
               { $multiply: [{ $size: "$likes" }, 1] },
               { $multiply: [{ $size: "$comments" }, 2] },
+              { $multiply: [{ $ifNull: ["$views", 0] }, 0.1] }, // Include views
             ],
           },
         },
@@ -147,53 +133,55 @@ const ListContents = async (req, res) => {
     ]);
 
     // Combine and calculate scores for all content
-    const allContent = [...followingContent, ...otherContent].map((content) => {
-      const baseEngagementScore =
-        engagementScores.get(content._id.toString()) || 0;
-      const timeDecay = getTimeDecayScore(content.createdAt);
-      const qualityScore = calculateQualityScore(content);
+    const allContent = await Promise.all(
+      [...followingContent, ...otherContent].map(async (content) => {
+        const baseEngagementScore =
+          engagementScores.get(content._id.toString()) || 0;
+        const timeDecay = getTimeDecayScore(content.createdAt);
+        const qualityScore = await calculateQualityScore(content);
 
-      // Calculate interest match score
-      const interestMatchScore = userInterests.some((interest) =>
-        content.status?.toLowerCase().includes(interest.toLowerCase())
-      )
-        ? 1.3
-        : 1;
+        // Calculate interest match score
+        const interestMatchScore = userInterests.some((interest) =>
+          content.status?.toLowerCase().includes(interest.toLowerCase())
+        )
+          ? 1.3
+          : 1;
 
-      // Calculate relationship boost
-      const relationshipBoost = followingEmails.includes(content.author.email)
-        ? 1.5
-        : 1;
+        // Calculate relationship boost
+        const relationshipBoost = followingEmails.includes(content.author.email)
+          ? 1.5
+          : 1;
 
-      // Calculate recency boost for interactions
-      const recentInteractionBoost = recentLikes.includes(
-        content._id.toString()
-      )
-        ? 1.2
-        : 1;
+        // Calculate recency boost for interactions
+        const recentInteractionBoost = recentLikes.includes(
+          content._id.toString()
+        )
+          ? 1.2
+          : 1;
 
-      // Calculate viral coefficient (simplified)
-      const viralCoefficient = baseEngagementScore > 100 ? 1.5 : 1;
+        // Calculate viral coefficient (simplified)
+        const viralCoefficient = baseEngagementScore > 100 ? 1.5 : 1;
 
-      // Boosted content gets priority
-      const boostMultiplier = content.isBoosted ? 2 : 1;
+        // Boosted content gets priority
+        const boostMultiplier = content.isBoosted ? 2 : 1;
 
-      // Final score calculation
-      const finalScore =
-        baseEngagementScore *
-        timeDecay *
-        qualityScore *
-        interestMatchScore *
-        relationshipBoost *
-        recentInteractionBoost *
-        viralCoefficient *
-        boostMultiplier;
+        // Final score calculation
+        const finalScore =
+          baseEngagementScore *
+          timeDecay *
+          qualityScore *
+          interestMatchScore *
+          relationshipBoost *
+          recentInteractionBoost *
+          viralCoefficient *
+          boostMultiplier;
 
-      return {
-        ...content,
-        score: finalScore,
-      };
-    });
+        return {
+          ...content,
+          score: finalScore,
+        };
+      })
+    );
 
     // Sort by score and take required number of items
     const sortedContent = allContent
