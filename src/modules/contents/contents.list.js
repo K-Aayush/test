@@ -189,7 +189,7 @@ const fetchAndScoreContent = async (
       let score;
       try {
         const response = await axios.post(
-          "http://localhost:2222/predict",
+          "http://182.93.94.210:0548/predict",
           features
         );
         score = response.data.score * qualityScore;
