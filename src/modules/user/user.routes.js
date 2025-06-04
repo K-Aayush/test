@@ -20,6 +20,7 @@ const {
   SubmitSupport,
   GetUserReports,
   GetUserSupport,
+  GetUserContent,
 } = require("./user.methods");
 const RegisterUser = require("./user.register");
 
@@ -28,6 +29,7 @@ router.get("/user-exist", UserExist);
 router.get("/users", GetAllUsers);
 router.get("/user-profile", basicMiddleware, UserProfile);
 router.get("/stalk-profile/:id", basicMiddleware, StalkProfile);
+router.get("/getUserContent/:id", basicMiddleware, GetUserContent);
 
 // post req
 router.post("/register-user", RegisterUser);
